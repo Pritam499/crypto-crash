@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Crypto Crash Test Client</title>
+  <style>
+    #game-state {
+      margin: 20px 0;
+      padding: 10px;
+      border: 1px solid #ddd;
+      background: #f9f9f9;
+    }
+    #events {
+      height: 300px;
+      overflow-y: scroll;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: #fff;
+    }
+    .event {
+      margin: 5px 0;
+      padding: 5px;
+      border-bottom: 1px solid #eee;
+    }
+    .crash {
+      color: red;
+      font-weight: bold;
+    }
+    .cashout {
+      color: green;
+    }
+  </style>
+</head>
+<body>
+  <h1>Crypto Crash Test Client</h1>
+  
+  <div>
+    <button id="connect">Connect to WebSocket</button>
+    <button id="disconnect" disabled>Disconnect</button>
+  </div>
+  
+  <div id="game-state">
+    <h3>Current Game State</h3>
+    <div id="current-round">Round: Not connected</div>
+    <div id="current-multiplier">Multiplier: 1.00x</div>
+    <div id="players">Players: 0</div>
+  </div>
+  
+  <h3>Game Events</h3>
+  <div id="events"></div>
+  
+  <script>
+    const eventsDiv = document.getElementById('events');
+    const connectBtn = document.getElementById('connect');
+    const disconnectBtn = document.getElementById('disconnect');
+    const currentRoundDiv = document.getElementById('current-round');
+    const currentMultiplierDiv = document.getElementById('current-multiplier');
+    const playersDiv = document.getElementById('players');
+    
+    let socket;
+    let playerCount = 0;
+    
+    function logEvent(type, message) {
+      const eventDiv = document.createElement('div');
+      eventDiv.className = `event ${type}`;
+      eventDiv.textContent = `[${new Date().toLocaleTimeString()}] ${message}`;
+      eventsDiv.appendChild(eventDiv);
+      eventsDiv.scrollTop = eventsDiv.scrollHeight;
+    }
+    
+    connectBtn.addEventListener('click', () => {
+      socket = new WebSocket('ws://localhost:5000');
+      
+      socket.addEventListener('open', () => {
+        logEvent('connection', 'Connected to WebSocket server');
+        connectBtn.disabled = true;
+        disconnectBtn.disabled = false;
+      });
+      
+      socket.addEventListener('message', (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          switch(data.event) {
+            case 'round_start':
+              currentRoundDiv.textContent = `Round: ${data.roundNumber} (Starting soon)`;
+              logEvent('round', `New round ${data.roundNumber} starting`);
+              break;
+              
+            case 'round_started':
+              currentRoundDiv.textContent = `Round: ${data.roundNumber} (In progress)`;
+              logEvent('round', `Round ${data.roundNumber} started! Crash hash: ${data.crashHash}`);
+              break;
+              
+            case 'multiplier_update':
+              currentMultiplierDiv.textContent = `Multiplier: ${data.multiplier.toFixed(2)}x (${data.elapsed}s)`;
+              break;
+              
+            case 'cashout':
+              logEvent('cashout', `Player ${data.playerId} cashed out at ${data.multiplier}x - Won ${data.usdAmount.toFixed(2)} USD`);
+              break;
+              
+            case 'crash':
+              currentMultiplierDiv.textContent = `Multiplier: CRASHED at ${data.crashPoint.toFixed(2)}x`;
+              logEvent('crash', `Round ${data.roundNumber} crashed at ${data.crashPoint.toFixed(2)}x`);
+              break;
+              
+            default:
+              logEvent('message', `Unknown event: ${JSON.stringify(data)}`);
+          }
+        } catch (e) {
+          logEvent('error', `Error parsing message: ${e.message}`);
+        }
+      });
+      
+      socket.addEventListener('error', (error) => {
+        logEvent('error', `WebSocket error: ${error.message}`);
+      });
+      
+      socket.addEventListener('close', () => {
+        logEvent('connection', 'Disconnected from WebSocket server');
+        connectBtn.disabled = false;
+        disconnectBtn.disabled = true;
+        currentRoundDiv.textContent = 'Round: Not connected';
+        currentMultiplierDiv.textContent = 'Multiplier: 1.00x';
+      });
+    });
+    
+    disconnectBtn.addEventListener('click', () => {
+      if (socket) {
+        socket.close();
+      }
+    });
+  </script>
+</body>
+</html>
